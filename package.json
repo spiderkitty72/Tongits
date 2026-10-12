@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npm run build -w @tongits/engine && npm run build -w @tongits/server && npm run build -w @tongits/client",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build -w @tongits/engine && npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "dev:server": "npm run dev -w @tongits/server",
     "dev:client": "npm run dev -w @tongits/client"
