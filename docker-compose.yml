@@ -1,0 +1,37 @@
+# Run your own Tong-its server: copy .env.example to .env, fill it in, then `docker compose up -d`.
+services:
+  server:
+    image: ${TONGITS_IMAGE:-ghcr.io/spiderkitty72/tongits:latest}
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://tongits:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/tongits
+      SERVER_NAME: ${SERVER_NAME:-Tong-its server}
+      SIGNUP_MODE: ${SIGNUP_MODE:-invite}
+      INVITE_CODE: ${INVITE_CODE:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      STARTING_CHIPS: ${STARTING_CHIPS:-100}
+    ports:
+      - "${PORT:-8080}:8080"
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tongits
+      POSTGRES_USER: tongits
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - tongits-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tongits -d tongits"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Postgres is only reachable by the game server, never from outside.
+
+volumes:
+  tongits-db:
