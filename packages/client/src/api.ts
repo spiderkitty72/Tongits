@@ -32,6 +32,9 @@ export interface SeatView {
   avatar: string;
   ready: boolean;
   connected: boolean;
+  /** Current chip balance. */
+  chips: number;
+  /** Chips won or lost so far in this match. */
   total: number;
 }
 
@@ -46,6 +49,7 @@ export interface RoomView {
   roundNo: number;
   game: PlayerView | null;
   turnDeadline: number | null;
+  notice: string | null;
 }
 
 export interface HistoryEntry {

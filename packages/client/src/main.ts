@@ -263,6 +263,7 @@ function lobbyScreen(room: RoomView): string {
       <section class="card-box">
         <p class="muted">Room code</p>
         <div class="code-row"><span class="code">${esc(room.code)}</span><button data-action="share">Share invite</button></div>
+        ${room.notice ? `<p class="notice">${esc(room.notice)}</p>` : ''}
         <ul class="seats">${seats}</ul>
         ${room.spectators ? `<p class="muted small">${room.spectators} watching</p>` : ''}
         <div class="lobby-actions">
@@ -330,12 +331,13 @@ function installHint(): string {
 function menu(): string {
   if (!state.menuOpen) return '';
   const room = state.room;
-  const canLeave = room && (room.mySeat < 0 || room.status === 'lobby' || room.status === 'finished');
+  const inMatch = room && room.mySeat >= 0 && (room.status === 'playing' || room.status === 'roundOver');
   return `<div class="overlay" data-action="close-menu"><div class="sheet menu" data-stop>
     <h3>Rules for this game</h3><p class="muted small">${room ? esc(rulesSummary(room.rules)) : ''}</p>
     ${room ? rulesForm(room.rules, false) : ''}
     <div class="sheet-actions">
-      ${canLeave ? '<button data-action="leave">Leave room</button>' : '<p class="muted small">You can leave once the match ends. If you close the app, the turn timer plays for you.</p>'}
+      ${room ? `<button data-action="leave">${inMatch ? 'Leave match' : 'Leave room'}</button>` : ''}
+      ${inMatch ? '<p class="muted small">Leaving ends the match for everyone. Finished rounds still count.</p>' : ''}
       <button class="primary" data-action="close-menu">Close</button>
     </div></div></div>`;
 }
@@ -432,6 +434,8 @@ app.addEventListener('click', (e) => {
       socket?.send({ t: 'create' });
       break;
     case 'leave':
+      if (room && room.mySeat >= 0 && (room.status === 'playing' || room.status === 'roundOver') &&
+        !confirm('Leave the match? It ends for everyone, and finished rounds still count.')) break;
       socket?.send({ t: 'leave' });
       state.menuOpen = false;
       break;

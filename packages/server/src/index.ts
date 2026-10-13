@@ -335,7 +335,7 @@ wss.on('connection', (ws) => {
       if (!userId) return send(ws, { t: 'authFailed' });
       const member = async () => {
         const p = (await getProfile(userId))!;
-        return { userId, displayName: p.displayName, avatar: p.avatar };
+        return { userId, displayName: p.displayName, avatar: p.avatar, chips: p.chips };
       };
       switch (msg.t) {
         case 'create':

@@ -251,3 +251,5 @@ button.meld.target { border: 2px solid var(--gold); animation: glow 1.2s ease-in
 #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translate(-50%, 120px); background: #1d1d1d; color: #fff; padding: 10px 16px; border-radius: 10px; max-width: 90vw; transition: transform 0.25s; z-index: 20; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
 #toast.show { transform: translate(-50%, 0); }
 #toast.error { background: #8e1c1c; }
+
+.notice { background: rgba(242, 193, 78, 0.15); border: 1px solid var(--gold); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }

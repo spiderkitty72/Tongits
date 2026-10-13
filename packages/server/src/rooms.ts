@@ -19,6 +19,8 @@ export interface Member {
   userId: number;
   displayName: string;
   avatar: string;
+  /** Chip balance from the player's profile. */
+  chips: number;
 }
 
 interface Seat extends Member {
@@ -31,7 +33,7 @@ export interface RoomView {
   code: string;
   hostId: number;
   mySeat: number;
-  seats: ({ userId: number; displayName: string; avatar: string; ready: boolean; connected: boolean; total: number } | null)[];
+  seats: ({ userId: number; displayName: string; avatar: string; ready: boolean; connected: boolean; chips: number; total: number } | null)[];
   spectators: number;
   rules: RuleSet;
   status: RoomStatus;
@@ -39,6 +41,8 @@ export interface RoomView {
   game: PlayerView | null;
   /** Epoch ms when the current turn timer runs out, or null. */
   turnDeadline: number | null;
+  /** A one-off message for the lobby, e.g. why the last match ended early. */
+  notice: string | null;
 }
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -59,6 +63,7 @@ export class Room {
   turnDeadline: number | null = null;
   timer: NodeJS.Timeout | null = null;
   lastActive = Date.now();
+  notice: string | null = null;
 
   constructor(public code: string, public hostId: number) {}
 
@@ -121,7 +126,10 @@ export class RoomManager {
     if (!room) return;
     const seat = room.seatOf(userId);
     if (seat >= 0 && (room.status === 'playing' || room.status === 'roundOver')) {
-      throw new GameError('You are in a match. Finish it first; the turn timer plays for you while you are away.');
+      // A player walking out ends the match. The unfinished round is dropped;
+      // rounds already played stay in everyone's history.
+      this.backToLobby(room);
+      room.notice = `${room.seats[seat]!.displayName} left, so the match ended. Finished rounds are saved in your history.`;
     }
     this.userRoom.delete(userId);
     room.spectators.delete(userId);
@@ -163,6 +171,7 @@ export class RoomManager {
     if (room.status !== 'lobby') throw new GameError('The game has already started.');
     if (room.seats.some((s) => s === null)) throw new GameError('Tong-its needs three players.');
     if (room.seats.some((s) => !s!.ready)) throw new GameError('Everyone must be ready.');
+    room.notice = null;
     room.matchId = randomUUID();
     room.totals = [0, 0, 0];
     room.roundNo = 0;
@@ -182,12 +191,19 @@ export class RoomManager {
     const room = this.mustRoom(userId);
     if (room.hostId !== userId) throw new GameError('Only the host can set up a new match.');
     if (room.status !== 'finished') throw new GameError('The match is still going.');
+    this.backToLobby(room);
+    this.broadcast(room);
+  }
+
+  private backToLobby(room: Room): void {
+    if (room.timer) clearTimeout(room.timer);
+    room.timer = null;
+    room.turnDeadline = null;
     room.status = 'lobby';
     room.game = null;
     room.roundNo = 0;
     room.totals = [0, 0, 0];
     for (const s of room.seats) if (s) s.ready = false;
-    this.broadcast(room);
   }
 
   act(userId: number, action: Action): void {
@@ -219,6 +235,7 @@ export class RoomManager {
               avatar: s.avatar,
               ready: s.ready,
               connected: this.isConnected(s.userId),
+              chips: s.chips,
               total: room.totals[i],
             }
           : null,
@@ -229,6 +246,7 @@ export class RoomManager {
       roundNo: room.roundNo,
       game: room.game ? playerView(room.game, mySeat) : null,
       turnDeadline: room.turnDeadline,
+      notice: room.notice,
     };
   }
 
@@ -262,7 +280,10 @@ export class RoomManager {
   private finishRound(room: Room): void {
     const g = room.game!;
     const result = g.result!;
-    for (let i = 0; i < SEATS; i++) room.totals[i] += result.payouts[i];
+    for (let i = 0; i < SEATS; i++) {
+      room.totals[i] += result.payouts[i];
+      room.seats[i]!.chips += result.payouts[i];
+    }
     const r = room.rules;
     const over =
       r.gameLength === 'single' ||
