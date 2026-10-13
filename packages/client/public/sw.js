@@ -1,6 +1,6 @@
 // Tong-its service worker: keeps the app shell available offline and loads fast.
 // Game traffic (/api, /ws) always goes to the network.
-const CACHE = 'tongits-shell-v1';
+const CACHE = 'tongits-shell-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
