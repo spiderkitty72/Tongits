@@ -10,6 +10,12 @@ export interface TableUi {
 
 const END_LABEL: Record<string, string> = { tongits: 'Tong-its!', draw: 'Draw', stockOut: 'Stock ran out' };
 
+function chipsLabel(s: SeatView | null | undefined): string {
+  if (!s) return '';
+  const change = s.total ? ` (${s.total > 0 ? '+' : ''}${s.total})` : '';
+  return `${s.chips} chips${change}`;
+}
+
 function seatName(room: RoomView, seat: number): string {
   return room.seats[seat]?.displayName ?? `Seat ${seat + 1}`;
 }
@@ -85,7 +91,7 @@ function opponentHtml(room: RoomView, g: PlayerView, seat: number, targets: Set<
   const backs = Array.from({ length: Math.min(p.handCount, 13) }, () => cardBack('mini')).join('');
   return `<section class="opponent ${side} ${turn ? 'turn' : ''}">
     <header><span class="avatar">${esc(s?.avatar ?? '🂠')}</span>
-      <span class="who"><strong>${esc(seatName(room, seat))}</strong><small>${p.handCount} cards · ${s?.total ?? 0} chips</small></span></header>
+      <span class="who"><strong>${esc(seatName(room, seat))}</strong><small>${p.handCount} cards · ${chipsLabel(s)}</small></span></header>
     <div class="badges">${badges}</div>
     <div class="backs" aria-label="${p.handCount} cards">${backs}</div>
     ${meldsHtml(g.melds.filter((m) => m.owner === seat), targets)}
@@ -113,7 +119,7 @@ function resultHtml(room: RoomView, g: PlayerView): string {
   if (room.status === 'finished') {
     const best = Math.max(...room.seats.map((s) => s?.total ?? 0));
     const champs = room.seats.filter((s) => s && s.total === best).map((s) => esc(s!.displayName)).join(' and ');
-    buttons = `<p class="match-over">Match over. ${champs} finished on top with ${best} chips.</p>`;
+    buttons = `<p class="match-over">Match over. ${champs} won the most this match (${best > 0 ? '+' : ''}${best} chips).</p>`;
     buttons += room.hostId === room.seats[room.mySeat]?.userId ? '<button class="primary" data-action="play-again">Back to lobby</button>' : '';
     buttons += '<button data-action="leave">Leave room</button>';
   }
@@ -185,7 +191,7 @@ export function renderTable(room: RoomView, ui: TableUi): string {
     ${ui.showLog ? `<div class="log">${g.log.map((l) => `<div>${esc(l)}</div>`).join('')}</div>` : ''}
     <section class="me ${m.myTurn ? 'turn' : ''}">
       <header><span class="avatar">${esc(myInfo?.avatar ?? '')}</span>
-        <span class="who"><strong>${me >= 0 ? 'You' : 'Spectating'}</strong><small>${me >= 0 ? `${g.myPoints} pts in hand · ${myInfo?.total ?? 0} chips` : ''}</small></span>
+        <span class="who"><strong>${me >= 0 ? 'You' : 'Spectating'}</strong><small>${me >= 0 ? `${g.myPoints} pts in hand · ${chipsLabel(myInfo)}` : ''}</small></span>
         <span class="badges">${myBadges}</span>
         ${me >= 0 ? `<button class="small-btn" data-action="sort">Sort: ${ui.sort === 'rank' ? 'rank' : 'suit'}</button>` : ''}</header>
       ${me >= 0 ? meldsHtml(g.melds.filter((x) => x.owner === me), m.sapawTargets) : ''}
