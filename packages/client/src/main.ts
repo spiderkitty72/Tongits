@@ -192,7 +192,7 @@ function serverScreen(): string {
   return `<main class="page narrow">
     <div class="brand"><img src="./icons/icon-192.png" alt="" width="72" height="72"><h1>Tong-its</h1><p>Play with friends on any server.</p></div>
     <form id="server-form" class="card-box">
-      <label>Server address<input name="url" type="url" inputmode="url" autocomplete="url" placeholder="https://tongits.example.com" value="${esc(state.serverUrl ?? here)}" required></label>
+      <label>Server address<input name="url" type="text" inputmode="url" autocapitalize="off" spellcheck="false" autocomplete="url" placeholder="https://tongits.example.com" value="${esc(state.serverUrl ?? here)}" required></label>
       <button class="primary" ${state.busy ? 'disabled' : ''}>${state.busy ? 'Connecting…' : 'Connect'}</button>
       <p class="muted small">Anyone can host a server. Ask the host for its address.</p>
     </form>

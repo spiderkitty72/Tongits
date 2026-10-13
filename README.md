@@ -159,7 +159,8 @@ If someone's turn timer runs out, the server plays for them: it draws, then disc
 
 | Problem | Fix |
 | --- | --- |
-| The page is blank or only says "Loading…" | You opened the source file `packages/client/index.html`. Open the server's address instead, or run `npm install && npm run build` and open `packages/client/dist/index.html`. |
+| "Please enter a URL" when typing the server address | Fixed in the current version. On an older copy, type it with `http://` in front, such as `http://192.168.1.20:8080`. |
+| The page is blank or only says "Loading…" | You opened the source file `packages/client/index.html`. Open the server's address instead, or run `npm install && npm run build` and host or open the files in `packages/client/dist`. |
 | "Could not reach …" on the server screen | Check the address and port. Make sure `docker compose ps` shows the server running and the firewall allows the port. From another device, try `http://<address>:8080/api/info` in a browser. |
 | "That address is not a Tong-its server" | The address points at something else, often a router or another web page. Check the port. |
 | The shared GitHub Pages app can't reach the server, but the server's own address works | The server must be HTTPS, and `CORS_ORIGINS` must be `*` or include `https://spiderkitty72.github.io`. |
