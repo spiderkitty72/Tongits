@@ -38,6 +38,7 @@ export interface SeatView {
   total: number;
   /** A computer player. */
   isBot: boolean;
+  botLevel: 'easy' | 'normal' | 'hard' | null;
 }
 
 export interface RoomView {
@@ -184,8 +185,9 @@ export type ServerMessage =
   | { t: 'authFailed' };
 
 export type ClientMessage =
-  | { t: 'create'; bots?: number }
-  | { t: 'addBot'; seat?: number }
+  | { t: 'create'; bots?: number; level?: string }
+  | { t: 'addBot'; seat?: number; level?: string }
+  | { t: 'botLevel'; seat: number; level: string }
   | { t: 'removeBot'; seat: number }
   | { t: 'join'; code: string }
   | { t: 'leave' }

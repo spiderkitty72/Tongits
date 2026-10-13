@@ -352,11 +352,14 @@ wss.on('connection', (ws) => {
           rooms.create(await member());
           // "Play against computers" fills the other two seats straight away.
           const bots = Math.min(2, Math.max(0, Number(msg.bots) || 0));
-          for (let i = 0; i < bots; i++) rooms.addBot(userId);
+          for (let i = 0; i < bots; i++) rooms.addBot(userId, undefined, msg.level);
           break;
         }
         case 'addBot':
-          rooms.addBot(userId, typeof msg.seat === 'number' ? msg.seat : undefined);
+          rooms.addBot(userId, typeof msg.seat === 'number' ? msg.seat : undefined, msg.level);
+          break;
+        case 'botLevel':
+          rooms.setBotLevel(userId, Number(msg.seat), msg.level);
           break;
         case 'removeBot':
           rooms.removeBot(userId, Number(msg.seat));

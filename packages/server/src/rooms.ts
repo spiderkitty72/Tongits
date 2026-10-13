@@ -8,6 +8,8 @@ import {
   RuleSet,
   SEATS,
   applyAction,
+  BOT_LEVELS,
+  BotLevel,
   autoAction,
   botAction,
   newRound,
@@ -28,6 +30,7 @@ interface Seat extends Member {
   ready: boolean;
   /** A computer player. Bots have negative user ids and no account. */
   isBot?: boolean;
+  botLevel?: BotLevel;
 }
 
 const BOT_NAMES = ['Lola', 'Kuya Ben', 'Tita Nena', 'Mang Jose', 'Ate Rose', 'Lolo Ramon'];
@@ -40,7 +43,7 @@ export interface RoomView {
   code: string;
   hostId: number;
   mySeat: number;
-  seats: ({ userId: number; displayName: string; avatar: string; ready: boolean; connected: boolean; chips: number; total: number; isBot: boolean } | null)[];
+  seats: ({ userId: number; displayName: string; avatar: string; ready: boolean; connected: boolean; chips: number; total: number; isBot: boolean; botLevel: BotLevel | null } | null)[];
   spectators: number;
   rules: RuleSet;
   status: RoomStatus;
@@ -67,6 +70,10 @@ export interface OpenTable {
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const IDLE_ROOM_MS = 30 * 60 * 1000;
 const secureRng = () => randomInt(2 ** 32) / 2 ** 32;
+
+function botLevel(value: unknown): BotLevel {
+  return BOT_LEVELS.includes(value as BotLevel) ? (value as BotLevel) : 'normal';
+}
 
 export class Room {
   seats: (Seat | null)[] = [null, null, null];
@@ -199,7 +206,7 @@ export class RoomManager {
   }
 
   /** Host only: seat a computer player in an empty seat (the first free one if none is given). */
-  addBot(userId: number, seatIndex?: number): void {
+  addBot(userId: number, seatIndex?: number, level: unknown = 'normal'): void {
     const room = this.mustRoom(userId);
     if (room.hostId !== userId) throw new GameError('Only the host can add computer players.');
     if (room.status !== 'lobby') throw new GameError('Add computer players before the game starts.');
@@ -207,7 +214,18 @@ export class RoomManager {
     if (seat < 0) throw new GameError('The table is full.');
     const taken = new Set(room.seats.map((s) => s?.displayName));
     const name = BOT_NAMES.find((n) => !taken.has(n)) ?? `Computer ${seat + 1}`;
-    room.seats[seat] = { userId: this.nextBotId--, displayName: name, avatar: '🤖', chips: 0, ready: true, isBot: true };
+    room.seats[seat] = { userId: this.nextBotId--, displayName: name, avatar: '🤖', chips: 0, ready: true, isBot: true, botLevel: botLevel(level) };
+    this.broadcast(room);
+  }
+
+  /** Host only: make a computer player easier or harder. */
+  setBotLevel(userId: number, seatIndex: number, level: unknown): void {
+    const room = this.mustRoom(userId);
+    if (room.hostId !== userId) throw new GameError('Only the host can change computer players.');
+    if (room.status !== 'lobby') throw new GameError('Change the level before the game starts.');
+    const seat = room.seats[seatIndex];
+    if (!seat?.isBot) throw new GameError('That seat is not a computer player.');
+    seat.botLevel = botLevel(level);
     this.broadcast(room);
   }
 
@@ -313,6 +331,7 @@ export class RoomManager {
               chips: s.chips,
               total: room.totals[i],
               isBot: !!s.isBot,
+              botLevel: s.isBot ? (s.botLevel ?? 'normal') : null,
             }
           : null,
       ),
@@ -370,7 +389,7 @@ export class RoomManager {
       room.botTimer = null;
       if (room.status !== 'playing' || room.game !== g) return;
       try {
-        const action = botAction(g, seat);
+        const action = botAction(g, seat, room.seats[seat]?.botLevel);
         if (action) this.apply(room, seat, action);
       } catch (err) {
         console.error('Computer move failed', err);

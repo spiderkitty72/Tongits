@@ -246,6 +246,34 @@ describe('rules input', () => {
 });
 
 describe('botAction', () => {
+  const levels = ['easy', 'normal', 'hard'] as const;
+  function playOut(seed: number, seatLevels: readonly ('easy' | 'normal' | 'hard')[]) {
+    const rng = mulberry32(seed * 31 + 7);
+    let s = newRound(DEFAULT_RULES, seed % 3, mulberry32(seed));
+    for (let step = 0; step < 2000 && s.phase !== 'ended'; step++) {
+      const waiting = s.phase === 'drawCall' ? Number(Object.entries(s.drawCall!.responses).find(([, r]) => r === null)![0]) : s.turn;
+      const action = botAction(s, waiting, seatLevels[waiting], rng);
+      expect(action).not.toBeNull();
+      s = applyAction(s, waiting, action!);
+    }
+    expect(s.phase).toBe('ended');
+    return s.result!;
+  }
+
+  it('plays whole rounds at every level without illegal moves', () => {
+    for (let seed = 1; seed <= 150; seed++) playOut(seed, [levels[seed % 3], levels[(seed + 1) % 3], levels[(seed + 2) % 3]]);
+  });
+
+  it('wins more chips the harder it is', () => {
+    const chips = { easy: 0, normal: 0, hard: 0 };
+    for (let seed = 1; seed <= 600; seed++) {
+      const seats = [levels[seed % 3], levels[(seed + 1) % 3], levels[(seed + 2) % 3]];
+      playOut(seed, seats).payouts.forEach((p, i) => (chips[seats[i]] += p));
+    }
+    expect(chips.hard).toBeGreaterThan(chips.normal);
+    expect(chips.normal).toBeGreaterThan(chips.easy);
+  });
+
   it('plays whole rounds against itself without illegal moves', () => {
     const endings = new Set<string>();
     for (let seed = 1; seed <= 200; seed++) {
@@ -271,5 +299,14 @@ describe('botAction', () => {
     s.players[1].hand = ['5S', '5C', '9D', '12H'];
     s.discard = ['5H'];
     expect(botAction(s, 1)).toEqual({ type: 'pickDiscard', cards: ['5S', '5C'] });
+  });
+
+  it('keeps a secret four-of-a-kind hidden on hard', () => {
+    const s = structuredClone(newRound(DEFAULT_RULES, 0, mulberry32(7)));
+    s.turn = 1;
+    s.phase = 'play';
+    s.players[1].hand = ['9S', '9C', '9D', '9H', '13S', '2D'];
+    expect(botAction(s, 1, 'normal')).toMatchObject({ type: 'meld' });
+    expect(botAction(s, 1, 'hard')).toEqual({ type: 'discard', card: '13S' });
   });
 });
