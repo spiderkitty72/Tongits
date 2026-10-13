@@ -482,10 +482,19 @@ app.addEventListener('click', (e) => {
     case 'draw-stock':
       send({ type: 'drawStock' });
       break;
-    case 'pick-discard':
-      if (g && moves(g, state.ui).canPickDiscard) send({ type: 'pickDiscard', cards: sel });
-      else toast('Select cards from your hand that meld with the top discard first.');
+    case 'pick-discard': {
+      if (!g) break;
+      const m = moves(g, state.ui);
+      if (m.canPickDiscard) send({ type: 'pickDiscard', cards: sel });
+      else if (m.discardPairs.length === 1) send({ type: 'pickDiscard', cards: m.discardPairs[0] });
+      else if (m.discardPairs.length > 1) {
+        // Several ways to use it: preselect the first and let the player adjust.
+        state.ui.selected = new Set(m.discardPairs[0]);
+        render();
+        toast('Selected cards that meld with the discard. Change them if you like, then tap Take discard.');
+      } else toast('The top discard does not make a meld with your cards.');
       break;
+    }
     case 'meld':
       send({ type: 'meld', cards: sel });
       break;
