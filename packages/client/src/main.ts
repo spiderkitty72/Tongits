@@ -4,6 +4,7 @@ import {
   ApiError,
   GameSocket,
   HistoryEntry,
+  OpenTable,
   Preset,
   Profile,
   RoomView,
@@ -27,6 +28,7 @@ const state = {
   token: null as string | null,
   profile: null as Profile | null,
   room: null as RoomView | null,
+  tables: [] as OpenTable[],
   online: false,
   authMode: 'login' as 'login' | 'register',
   history: null as HistoryEntry[] | null,
@@ -132,6 +134,10 @@ function onMessage(msg: ServerMessage): void {
       state.screen = 'home';
       refreshProfile();
     }
+  } else if (msg.t === 'tables') {
+    state.tables = msg.tables;
+    // Only the home screen shows the list; skip re-rendering a game in progress.
+    if (state.screen !== 'home') return;
   } else if (msg.t === 'error') {
     toast(msg.message, 'error');
   } else if (msg.t === 'authFailed') {
@@ -234,6 +240,7 @@ function homeScreen(): string {
       </form>
       ${state.online ? '' : '<p class="muted small">Connecting to the server…</p>'}
     </div>
+    ${openTablesHtml()}
     <div class="links">
       <button data-action="open-profile">Profile and history</button>
       <button data-action="change-server">Change server</button>
@@ -241,6 +248,20 @@ function homeScreen(): string {
     </div>
     ${installHint()}
   </main>`;
+}
+
+function openTablesHtml(): string {
+  if (!state.online) return '';
+  const rows = state.tables.map((t) => {
+    const seated = t.status === 'lobby' && t.seatsFree > 0;
+    const where = t.status === 'lobby' ? `${3 - t.seatsFree} of 3 seated` : 'Playing now';
+    return `<li><span class="avatars">${t.players.map((p) => esc(p.avatar)).join('')}</span>
+      <span class="who"><strong>${esc(t.host)}'s table</strong><small>${where} · ${esc(rulesSummary(t.rules))}</small></span>
+      <button class="${seated ? 'primary' : ''}" data-action="join-table" data-code="${esc(t.code)}">${seated ? 'Join' : 'Watch'}</button></li>`;
+  }).join('');
+  return `<section class="card-box open-tables"><h3>Open tables</h3>
+    ${rows ? `<ul class="tables">${rows}</ul>` : '<p class="muted small">No open tables right now. Create a room and tick “Open table” so anyone here can join.</p>'}
+  </section>`;
 }
 
 function lobbyScreen(room: RoomView): string {
@@ -264,6 +285,9 @@ function lobbyScreen(room: RoomView): string {
         <p class="muted">Room code</p>
         <div class="code-row"><span class="code">${esc(room.code)}</span><button data-action="share">Share invite</button></div>
         ${room.notice ? `<p class="notice">${esc(room.notice)}</p>` : ''}
+        ${isHost
+          ? `<label class="open-toggle"><input type="checkbox" id="open-table" ${room.isOpen ? 'checked' : ''}> Open table <small class="muted">Anyone on this server can see and join it</small></label>`
+          : room.isOpen ? '<p class="muted small">This is an open table: anyone on the server can join.</p>' : ''}
         <ul class="seats">${seats}</ul>
         ${room.spectators ? `<p class="muted small">${room.spectators} watching</p>` : ''}
         <div class="lobby-actions">
@@ -446,6 +470,9 @@ app.addEventListener('click', (e) => {
       else navigator.clipboard?.writeText(`${text} ${link}`).then(() => toast('Invite link copied.'));
       break;
     }
+    case 'join-table':
+      socket?.send({ t: 'join', code: el.dataset.code! });
+      break;
     case 'ready':
       socket?.send({ t: 'ready', ready: !room!.seats[room!.mySeat]?.ready });
       break;
@@ -562,6 +589,10 @@ app.addEventListener('change', (e) => {
   const el = e.target as HTMLElement;
   const room = state.room;
   if (!room) return;
+  if (el.id === 'open-table') {
+    socket?.send({ t: 'open', open: (el as HTMLInputElement).checked });
+    return;
+  }
   if (el.id === 'preset-select') {
     const v = (el as HTMLSelectElement).value;
     const rules: RuleSet = v === 'standard' ? DEFAULT_RULES : (state.presets.find((p) => String(p.id) === v)?.rules ?? DEFAULT_RULES);

@@ -253,3 +253,12 @@ button.meld.target { border: 2px solid var(--gold); animation: glow 1.2s ease-in
 #toast.error { background: #8e1c1c; }
 
 .notice { background: rgba(242, 193, 78, 0.15); border: 1px solid var(--gold); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+.open-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.open-toggle small { flex-basis: 100%; }
+.open-tables h3 { margin-top: 0; }
+.tables { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.tables button { flex: none; }
+.tables li { display: flex; align-items: center; gap: 10px; }
+.tables .avatars { font-size: 1.4rem; min-width: 3.6rem; }
+.tables .who { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.tables .who small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
