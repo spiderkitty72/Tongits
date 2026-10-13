@@ -50,6 +50,16 @@ export interface RoomView {
   game: PlayerView | null;
   turnDeadline: number | null;
   notice: string | null;
+  isOpen: boolean;
+}
+
+export interface OpenTable {
+  code: string;
+  host: string;
+  players: { displayName: string; avatar: string }[];
+  seatsFree: number;
+  status: RoomView['status'];
+  rules: RuleSet;
 }
 
 export interface HistoryEntry {
@@ -167,6 +177,7 @@ export async function fetchInfo(base: string): Promise<ServerInfo> {
 export type ServerMessage =
   | { t: 'hello'; profile: Profile }
   | { t: 'room'; room: RoomView | null }
+  | { t: 'tables'; tables: OpenTable[] }
   | { t: 'error'; message: string }
   | { t: 'authFailed' };
 
@@ -174,6 +185,7 @@ export type ClientMessage =
   | { t: 'create' }
   | { t: 'join'; code: string }
   | { t: 'leave' }
+  | { t: 'open'; open: boolean }
   | { t: 'rules'; rules: RuleSet }
   | { t: 'ready'; ready: boolean }
   | { t: 'start' }

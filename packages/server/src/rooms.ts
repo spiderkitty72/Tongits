@@ -43,6 +43,18 @@ export interface RoomView {
   turnDeadline: number | null;
   /** A one-off message for the lobby, e.g. why the last match ended early. */
   notice: string | null;
+  /** Listed on everyone's home screen so anyone on the server can join. */
+  isOpen: boolean;
+}
+
+/** An open table as shown in the home screen list. */
+export interface OpenTable {
+  code: string;
+  host: string;
+  players: { displayName: string; avatar: string }[];
+  seatsFree: number;
+  status: RoomStatus;
+  rules: RuleSet;
 }
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -64,6 +76,7 @@ export class Room {
   timer: NodeJS.Timeout | null = null;
   lastActive = Date.now();
   notice: string | null = null;
+  isOpen = false;
 
   constructor(public code: string, public hostId: number) {}
 
@@ -80,6 +93,8 @@ export class RoomManager {
   constructor(
     private isConnected: (userId: number) => boolean,
     private push: (userId: number, room: Room | null) => void,
+    /** Called whenever the list of open tables may have changed. */
+    private openTablesChanged: () => void = () => {},
   ) {
     setInterval(() => this.sweep(), 60 * 1000).unref();
   }
@@ -146,6 +161,28 @@ export class RoomManager {
       return;
     }
     this.broadcast(room);
+  }
+
+  /** Host only: list the table for anyone on the server to join, or hide it again. */
+  setOpen(userId: number, open: boolean): void {
+    const room = this.mustRoom(userId);
+    if (room.hostId !== userId) throw new GameError('Only the host can open the table.');
+    room.isOpen = open;
+    this.broadcast(room);
+    this.openTablesChanged();
+  }
+
+  openTables(): OpenTable[] {
+    return [...this.rooms.values()]
+      .filter((r) => r.isOpen)
+      .map((r) => ({
+        code: r.code,
+        host: r.seats.find((s) => s?.userId === r.hostId)?.displayName ?? '',
+        players: r.seats.filter((s): s is Seat => s !== null).map((s) => ({ displayName: s.displayName, avatar: s.avatar })),
+        seatsFree: r.seats.filter((s) => s === null).length,
+        status: r.status,
+        rules: r.rules,
+      }));
   }
 
   setRules(userId: number, rules: unknown): void {
@@ -247,6 +284,7 @@ export class RoomManager {
       game: room.game ? playerView(room.game, mySeat) : null,
       turnDeadline: room.turnDeadline,
       notice: room.notice,
+      isOpen: room.isOpen,
     };
   }
 
@@ -340,9 +378,11 @@ export class RoomManager {
   private broadcast(room: Room): void {
     for (const s of room.seats) if (s) this.push(s.userId, room);
     for (const u of room.spectators) this.push(u, room);
+    if (room.isOpen) this.openTablesChanged();
   }
 
   private close(room: Room): void {
+    if (room.isOpen) this.openTablesChanged();
     if (room.timer) clearTimeout(room.timer);
     this.rooms.delete(room.code);
     for (const s of room.seats) if (s) this.userRoom.delete(s.userId);

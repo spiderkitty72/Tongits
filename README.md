@@ -119,15 +119,16 @@ The installed app opens full screen and remembers your servers and logins. It lo
 
 1. **Create a room** on the home screen. You become the host and get a 4-letter room code.
 2. **Invite two friends.** Tap **Share invite** to send a link that opens the app on the right server and joins the room. Or friends type the code under **Join**. Anyone joining a full or running room watches as a spectator.
+   - To let anyone on the server join without a code, the host ticks **Open table** in the lobby. Open tables are listed on everyone's home screen with a **Join** button (or **Watch** once the match is running).
 3. **Set the house rules** (host only). Pick **Standard** or one of your saved presets, change anything on the rules page, and tap **Save as…** to keep it for next time. Everyone in the lobby sees the rules; they lock when the game starts.
 4. Everyone taps **I'm ready**, then the host taps **Start game**.
 5. **On your turn**:
-   - Tap **Draw from stock**. To take the top discard instead, first select the cards in your hand that make a meld with it, then tap **Take discard**.
+   - Tap the stock pile or **Draw from stock**. When the top discard melds with two or more of your cards, the discard pile lights up: tap it or **Take discard** to take it and meld it at once.
    - Select cards and tap **Meld** to lay them down. To **sapaw**, select cards and tap a glowing meld on the table.
    - Select one card and tap **Discard** to end your turn.
    - At the start of your turn, if you have a meld down, **Call Draw** appears. Other players with a meld choose **Fight** or **Fold**.
    - Cards with a gold edge can form a meld with other cards in your hand. **Sort** switches between rank and suit order. 📜 shows what happened recently.
-6. After each round the result shows every hand, points and chips. Any player taps **Deal next round**. When the match ends, the host can go **Back to lobby** for another.
+6. After each round the result shows every hand, points and chips. Any player taps **Deal next round**. When the match ends, the host can go **Back to lobby** for another. Leaving from the ☰ menu mid-match ends the match for everyone; finished rounds still count.
 
 If someone's turn timer runs out, the server plays for them: it draws, then discards their highest card, and folds if Draw was called. Players who close the app or lose signal can reopen it and they're put straight back at the table. You can't leave a match until it ends.
 

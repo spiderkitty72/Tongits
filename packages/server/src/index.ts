@@ -48,7 +48,16 @@ const rooms = new RoomManager(connected, (userId: number, room: Room | null) => 
     if (c.userId !== userId) continue;
     send(c.ws, { t: 'room', room: room ? rooms.view(room, userId) : null });
   }
+}, () => {
+  // Coalesce bursts (a game move can touch the list several times).
+  if (tablesTimer) return;
+  tablesTimer = setTimeout(() => {
+    tablesTimer = null;
+    const tables = rooms.openTables();
+    for (const c of clients) if (c.userId) send(c.ws, { t: 'tables', tables });
+  }, 250);
 });
+let tablesTimer: NodeJS.Timeout | null = null;
 
 // ---------- HTTP helpers ----------
 
@@ -328,6 +337,7 @@ wss.on('connection', (ws) => {
         }
         client.userId = userId;
         send(ws, { t: 'hello', profile });
+        send(ws, { t: 'tables', tables: rooms.openTables() });
         rooms.refresh(userId);
         return;
       }
@@ -346,6 +356,9 @@ wss.on('connection', (ws) => {
           break;
         case 'leave':
           rooms.leave(userId);
+          break;
+        case 'open':
+          rooms.setOpen(userId, !!msg.open);
           break;
         case 'rules':
           rooms.setRules(userId, msg.rules);
