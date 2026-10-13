@@ -8,6 +8,8 @@ export interface ServerInfo {
   version: string;
   protocol: number;
   signup: 'open' | 'invite' | 'closed';
+  /** How to reach the admin for a password reset: an email address or web link. */
+  adminContact: string | null;
   playersOnline: number;
   rooms: number;
   avatars: string[];
@@ -24,6 +26,39 @@ export interface Profile {
   wins: number;
   tongitsWins: number;
   timesBurned: number;
+  isAdmin: boolean;
+}
+
+export interface LeaderRow {
+  userId: number;
+  displayName: string;
+  avatar: string;
+  chips: number;
+  gamesPlayed: number;
+  wins: number;
+  tongitsWins: number;
+}
+
+export interface ServerStats {
+  accounts: number;
+  newThisWeek: number;
+  activeThisWeek: number;
+  roundsPlayed: number;
+  roundsToday: number;
+  chipsInPlay: number;
+  resetRequests: number;
+  online: number;
+  rooms: number;
+  playing: number;
+}
+
+export interface AdminUser extends Omit<Profile, 'isAdmin'> {
+  isAdmin: boolean;
+  disabled: boolean;
+  online: boolean;
+  createdAt: string;
+  lastSeen: string | null;
+  resetRequestedAt: string | null;
 }
 
 export interface SeatView {

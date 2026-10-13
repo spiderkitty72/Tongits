@@ -282,3 +282,35 @@ button.big + button.big { margin-top: 10px; }
 .open-toggle small { font-size: 0.8rem; }
 .seats li .bot-level { margin-left: auto; width: auto; min-height: 36px; padding: 4px 8px; font-size: 0.9rem; }
 .seats li .bot-level + .small-btn { margin-left: 6px; }
+
+/* ---------- Leaderboard ---------- */
+.leaders { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.leaders li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid transparent; }
+.leaders li.me { border-color: var(--gold); }
+.leaders .who { flex: 1; min-width: 0; }
+.leaders .who strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-no { width: 2em; text-align: center; font-weight: 700; color: var(--muted); font-size: 1.1rem; flex: none; }
+.leaders .score { font-weight: 700; color: var(--gold); white-space: nowrap; }
+
+/* ---------- Admin ---------- */
+.admin-stats { grid-template-columns: repeat(3, 1fr); row-gap: 14px; }
+#admin-search { margin-bottom: 12px; }
+#admin-search input { width: 100%; }
+.people { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 8px; }
+.people button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; }
+.people .who { flex: 1; min-width: 0; }
+.people small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.badges:empty { display: none; }
+.badge { font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); }
+.badge.on { background: rgba(95, 211, 141, 0.3); }
+.badge.off { background: rgba(198, 40, 40, 0.6); }
+.badge.warn { background: var(--gold); color: #2b2100; }
+.profile-top > div { min-width: 0; overflow-wrap: anywhere; }
+.reset-link { display: grid; gap: 8px; }
+.reset-link input { width: 100%; font-size: 0.85rem; }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+a.button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: inherit; text-decoration: none; }
+button.danger { color: #ff9b9b; border-color: rgba(198, 40, 40, 0.6); }
+.link-btn { background: none; border: none; min-height: 0; padding: 4px; color: var(--gold); text-decoration: underline; justify-self: center; }
+.card-box a { color: var(--gold); }

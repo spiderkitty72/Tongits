@@ -1,7 +1,10 @@
 import './style.css';
 import { Action, CardId, DEFAULT_RULES, RuleSet } from '@tongits/engine';
 import {
+  AdminUser,
   ApiError,
+  LeaderRow,
+  ServerStats,
   GameSocket,
   HistoryEntry,
   OpenTable,
@@ -17,9 +20,10 @@ import {
 } from './api';
 import { readRulesForm, rulesForm, rulesSummary } from './rulesForm';
 import { TableUi, moves, renderTable } from './table';
+import { adminHtml, adminUserHtml, contactHtml, leaderboardHtml } from './screens';
 import { esc, timeAgo, toast } from './util';
 
-type Screen = 'server' | 'auth' | 'home' | 'room' | 'profile';
+type Screen = 'server' | 'auth' | 'home' | 'room' | 'profile' | 'leaderboard' | 'admin' | 'admin-user' | 'reset';
 
 const state = {
   screen: 'server' as Screen,
@@ -30,7 +34,21 @@ const state = {
   room: null as RoomView | null,
   tables: [] as OpenTable[],
   online: false,
-  authMode: 'login' as 'login' | 'register',
+  authMode: 'login' as 'login' | 'register' | 'forgot',
+  /** The app was loaded from a Tong-its server, so it stays on that server. */
+  hosted: false,
+  forgotSent: false,
+  /** Token from a password reset link. */
+  resetToken: null as string | null,
+  leaders: null as LeaderRow[] | null,
+  leadersBy: 'chips' as 'chips' | 'wins',
+  admin: {
+    stats: null as ServerStats | null,
+    users: null as AdminUser[] | null,
+    query: '',
+    user: null as { user: AdminUser; games: HistoryEntry[] } | null,
+    reset: null as { link: string; expiresAt: string } | null,
+  },
   history: null as HistoryEntry[] | null,
   presets: [] as Preset[],
   busy: false,
@@ -157,6 +175,44 @@ async function refreshProfile(): Promise<void> {
   }
 }
 
+async function loadLeaders(): Promise<void> {
+  state.leaders = null;
+  render();
+  try {
+    state.leaders = (await api<{ players: LeaderRow[] }>(`/api/leaderboard?by=${state.leadersBy}`)).players;
+  } catch (err) {
+    state.leaders = [];
+    toast(err instanceof Error ? err.message : String(err), 'error');
+  }
+  render();
+}
+
+async function loadAdmin(): Promise<void> {
+  try {
+    const [stats, users] = await Promise.all([
+      api<ServerStats>('/api/admin/stats'),
+      api<{ users: AdminUser[] }>(`/api/admin/users?q=${encodeURIComponent(state.admin.query)}`),
+    ]);
+    state.admin.stats = stats;
+    state.admin.users = users.users;
+  } catch (err) {
+    toast(err instanceof Error ? err.message : String(err), 'error');
+  }
+  render();
+}
+
+async function openAdminUser(id: number): Promise<void> {
+  state.admin.user = null;
+  state.admin.reset = null;
+  go('admin-user');
+  try {
+    state.admin.user = await api<{ user: AdminUser; games: HistoryEntry[] }>(`/api/admin/users/${id}`);
+  } catch (err) {
+    toast(err instanceof Error ? err.message : String(err), 'error');
+  }
+  render();
+}
+
 async function loadPresets(): Promise<void> {
   try {
     state.presets = (await api<{ presets: Preset[] }>('/api/me/presets')).presets;
@@ -229,8 +285,9 @@ function authScreen(): string {
   const info = state.info!;
   const reg = state.authMode === 'register';
   const canRegister = info.signup !== 'closed';
+  if (state.authMode === 'forgot') return forgotScreen(info);
   return `<main class="page narrow">
-    ${logoHeader('change-server')}
+    ${logoHeader(state.hosted ? undefined : 'change-server')}
     ${canRegister ? `<div class="tabs"><button class="${reg ? '' : 'active'}" data-action="auth-mode" data-mode="login">Log in</button><button class="${reg ? 'active' : ''}" data-action="auth-mode" data-mode="register">Sign up</button></div>` : ''}
     <form id="auth-form" class="card-box">
       <label>Email<input name="email" type="email" autocomplete="email" required></label>
@@ -238,10 +295,41 @@ function authScreen(): string {
       ${reg ? `<label>Display name<input name="displayName" maxlength="24" autocomplete="nickname" required></label>` : ''}
       ${reg && info.signup === 'invite' ? `<label>Invite code<input name="inviteCode" autocomplete="off" required><small>This server is invite-only. Ask the host for the code.</small></label>` : ''}
       <button class="primary" ${state.busy ? 'disabled' : ''}>${reg ? 'Create account' : 'Log in'}</button>
+      ${reg ? '' : '<button type="button" class="link-btn" data-action="auth-mode" data-mode="forgot">Forgot password?</button>'}
     </form>
     ${!canRegister ? '<p class="muted center">Sign-up is closed on this server.</p>' : ''}
     ${serverFooter()}
     <p class="muted center small">${esc(state.serverUrl!)} · ${info.playersOnline} online</p>
+  </main>`;
+}
+
+function forgotScreen(info: ServerInfo): string {
+  const body = state.forgotSent
+    ? `<p>Thanks. The admin can see your request and will send you a link to choose a new password.</p>
+       <p class="muted small">${contactHtml(info.adminContact)}</p>`
+    : `<form id="forgot-form">
+        <p class="muted small">Enter your account email. The admin will send you a link to choose a new password.</p>
+        <label>Email<input name="email" type="email" autocomplete="email" required></label>
+        <button class="primary" ${state.busy ? 'disabled' : ''}>Ask for a reset</button>
+      </form>
+      <p class="muted small">${contactHtml(info.adminContact)}</p>`;
+  return `<main class="page narrow">
+    ${logoHeader('back-to-login')}
+    <section class="card-box"><h3>Forgot your password?</h3>${body}</section>
+    ${serverFooter()}
+  </main>`;
+}
+
+function resetScreen(): string {
+  return `<main class="page narrow">
+    ${logoHeader()}
+    <form id="reset-form" class="card-box">
+      <h3>Choose a new password</h3>
+      <label>New password<input name="password" type="password" minlength="8" autocomplete="new-password" required></label>
+      <label>Type it again<input name="confirm" type="password" minlength="8" autocomplete="new-password" required></label>
+      <button class="primary" ${state.busy ? 'disabled' : ''}>Save and log in</button>
+    </form>
+    ${serverFooter()}
   </main>`;
 }
 
@@ -262,8 +350,10 @@ function homeScreen(): string {
     </div>
     ${openTablesHtml()}
     <div class="links">
+      <button data-action="open-leaders">🏆 Leaderboard</button>
       <button data-action="open-profile">Profile and history</button>
-      <button data-action="change-server">Change server</button>
+      ${p.isAdmin ? '<button data-action="open-admin">Admin</button>' : ''}
+      ${state.hosted ? '' : '<button data-action="change-server">Change server</button>'}
       <button data-action="logout">Log out</button>
     </div>
     ${installHint()}
@@ -404,9 +494,16 @@ function render(): void {
 
   let html = '';
   if (state.screen === 'server' || !state.info) html = serverScreen();
+  else if (state.screen === 'reset') html = resetScreen();
   else if (state.screen === 'auth' || !state.profile) html = authScreen();
   else if (state.screen === 'profile') html = profileScreen();
-  else if (state.screen === 'room' && state.room) {
+  else if (state.screen === 'leaderboard') {
+    html = `<main class="page narrow">${header('Leaderboard', 'home')}${leaderboardHtml(state.leaders, state.leadersBy, state.profile.userId)}</main>`;
+  } else if (state.screen === 'admin' && state.profile.isAdmin) {
+    html = `<main class="page narrow">${header('Admin', 'home')}${adminHtml(state.admin.stats, state.admin.users, state.admin.query)}</main>`;
+  } else if (state.screen === 'admin-user' && state.profile.isAdmin) {
+    html = `<main class="page narrow">${header('Player', 'open-admin')}${adminUserHtml(state.admin.user, state.profile.userId, state.admin.reset)}</main>`;
+  } else if (state.screen === 'room' && state.room) {
     html = state.room.status === 'lobby' ? lobbyScreen(state.room) : renderTable(state.room, state.ui);
   } else html = homeScreen();
   app.innerHTML = html + menu();
@@ -462,9 +559,60 @@ app.addEventListener('click', (e) => {
       go('server');
       break;
     case 'auth-mode':
-      state.authMode = el.dataset.mode as 'login' | 'register';
+      state.authMode = el.dataset.mode as typeof state.authMode;
+      state.forgotSent = false;
       render();
       break;
+    case 'back-to-login':
+      state.authMode = 'login';
+      render();
+      break;
+    case 'open-leaders':
+      go('leaderboard');
+      loadLeaders();
+      break;
+    case 'leaders-by':
+      state.leadersBy = el.dataset.by === 'wins' ? 'wins' : 'chips';
+      loadLeaders();
+      break;
+    case 'open-admin':
+      state.admin.user = null;
+      state.admin.reset = null;
+      go('admin');
+      loadAdmin();
+      break;
+    case 'admin-user':
+      openAdminUser(Number(el.dataset.id));
+      break;
+    case 'make-reset': {
+      const u = state.admin.user?.user;
+      if (!u) break;
+      busy(async () => {
+        const r = await api<{ token: string; expiresAt: string }>(`/api/admin/users/${u.userId}/reset`, 'POST');
+        const base = `${location.origin}${location.pathname}`;
+        const link = `${base}?${state.hosted ? '' : `server=${encodeURIComponent(state.serverUrl!)}&`}reset=${encodeURIComponent(r.token)}`;
+        state.admin.reset = { link, expiresAt: r.expiresAt };
+      });
+      break;
+    }
+    case 'copy-reset':
+      if (state.admin.reset) navigator.clipboard?.writeText(state.admin.reset.link).then(() => toast('Link copied.'), () => toast('Copy it from the box.', 'error'));
+      break;
+    case 'share-reset':
+      if (state.admin.reset) navigator.share?.({ title: 'Reset your Tong-its password', url: state.admin.reset.link }).catch(() => {});
+      break;
+    case 'delete-user': {
+      const u = state.admin.user?.user;
+      if (!u || !confirm(`Delete ${u.displayName}'s account? Their finished games stay in other players' history. This cannot be undone.`)) break;
+      busy(async () => {
+        await api(`/api/admin/users/${u.userId}`, 'DELETE');
+        toast('Account deleted.');
+        state.admin.user = null;
+        state.screen = 'admin';
+        loadAdmin();
+      });
+      break;
+    }
     case 'logout':
       logout();
       break;
@@ -614,6 +762,47 @@ app.addEventListener('submit', (e) => {
       state.screen = 'home';
     });
   }
+  if (form.id === 'forgot-form') {
+    busy(async () => {
+      await http(state.serverUrl!, '/api/password/forgot', { method: 'POST', body: { email: data.email } });
+      state.forgotSent = true;
+    });
+  }
+  if (form.id === 'reset-form') {
+    if (data.password !== data.confirm) {
+      toast('The two passwords are different.', 'error');
+      return;
+    }
+    busy(async () => {
+      const res = await http<{ token: string; profile: Profile }>(state.serverUrl!, '/api/password/reset', {
+        method: 'POST',
+        body: { token: state.resetToken, password: data.password },
+      });
+      state.resetToken = null;
+      state.token = res.token;
+      state.profile = res.profile;
+      store.setToken(state.serverUrl!, res.token);
+      connect();
+      state.screen = 'home';
+      toast('Password changed. You are logged in.');
+    });
+  }
+  if (form.id === 'admin-edit') {
+    const u = state.admin.user?.user;
+    if (!u) return;
+    const box = (name: string) => (form.elements.namedItem(name) as HTMLInputElement).checked;
+    if (box('disabled') && !u.disabled && !confirm(`Turn off ${u.displayName}'s account? They are logged out and cannot log in until you turn it back on.`)) return;
+    busy(async () => {
+      state.admin.user = await api(`/api/admin/users/${u.userId}`, 'PUT', {
+        displayName: data.displayName,
+        chips: Number(data.chips),
+        isAdmin: box('isAdmin'),
+        disabled: box('disabled'),
+      });
+      toast('Saved.');
+    });
+  }
+  if (form.id === 'admin-search') loadAdmin();
   if (form.id === 'join-form') {
     socket?.send({ t: 'join', code: data.code.toUpperCase().trim() });
   }
@@ -623,6 +812,15 @@ app.addEventListener('submit', (e) => {
       toast('Name saved.');
     });
   }
+});
+
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+app.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.form?.id !== 'admin-search') return;
+  state.admin.query = el.value;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadAdmin, 250);
 });
 
 app.addEventListener('change', (e) => {
@@ -667,24 +865,27 @@ async function boot(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const linkServer = params.get('server');
   state.pendingRoom = params.get('room');
-  if (linkServer || state.pendingRoom) history.replaceState(null, '', location.pathname);
+  state.resetToken = params.get('reset');
+  if (linkServer || state.pendingRoom || state.resetToken) history.replaceState(null, '', location.pathname);
 
   render();
-  const candidate = linkServer ?? store.current();
-  if (candidate) {
-    await chooseServer(candidate);
-    return;
-  }
-  // When the app is served by a Tong-its server, offer that server straight away.
+  // When the app is served by a Tong-its server it always uses that server.
+  // Only a copy hosted elsewhere (or a dev build) lets the player pick one.
   if (location.protocol.startsWith('http')) {
     try {
       const here = location.origin;
       await fetchInfo(here);
+      state.hosted = true;
       await chooseServer(here);
     } catch {
-      /* static hosting: the player types a server address */
+      /* static hosting: fall through to the saved or linked server */
     }
   }
+  if (!state.hosted) {
+    const candidate = linkServer ?? store.current();
+    if (candidate) await chooseServer(candidate);
+  }
+  if (state.resetToken && state.info) go('reset');
 }
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

@@ -13,11 +13,12 @@ export interface Profile {
   wins: number;
   tongitsWins: number;
   timesBurned: number;
+  isAdmin: boolean;
 }
 
 export async function getProfile(userId: number): Promise<Profile | null> {
   const { rows } = await pool.query(
-    `SELECT u.id, u.email, p.display_name, p.avatar, p.chips, p.games_played, p.wins, p.tongits_wins, p.times_burned
+    `SELECT u.id, u.email, p.display_name, p.avatar, p.chips, p.games_played, p.wins, p.tongits_wins, p.times_burned, u.is_admin
        FROM users u JOIN profiles p ON p.user_id = u.id WHERE u.id = $1`,
     [userId],
   );
@@ -33,6 +34,7 @@ export async function getProfile(userId: number): Promise<Profile | null> {
     wins: r.wins,
     tongitsWins: r.tongits_wins,
     timesBurned: r.times_burned,
+    isAdmin: r.is_admin,
   };
 }
 
