@@ -21,7 +21,8 @@ export function cardHtml(id: CardId, opts: { selected?: boolean; hint?: boolean;
     .filter(Boolean)
     .join(' ');
   const label = `${rankLabel(cardRank(id))}${SUIT_SYMBOL[suit]}`;
-  const inner = `<span class="rank">${rankLabel(cardRank(id))}</span><span class="suit">${SUIT_SYMBOL[suit]}</span>`;
+  // Rank and suit sit in the corner so they stay readable when cards overlap.
+  const inner = `<span class="corner"><span class="rank">${rankLabel(cardRank(id))}</span><span class="suit">${SUIT_SYMBOL[suit]}</span></span><span class="pip" aria-hidden="true">${SUIT_SYMBOL[suit]}</span>`;
   if (opts.action) {
     return `<button type="button" class="${cls}" data-action="${opts.action}" data-card="${id}" aria-pressed="${!!opts.selected}" aria-label="${label}" ${opts.disabled ? 'disabled' : ''}>${inner}</button>`;
   }
