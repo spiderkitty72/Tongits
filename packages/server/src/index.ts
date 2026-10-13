@@ -25,6 +25,21 @@ import {
   updateProfile,
 } from './profiles.js';
 import { Room, RoomManager } from './rooms.js';
+import {
+  AccountError,
+  adminUpdateUser,
+  applyAdminEmails,
+  createResetToken,
+  deleteUser,
+  getAdminUser,
+  isAdmin,
+  leaderboard,
+  listUsers,
+  requestReset,
+  serverStats,
+  touchLastSeen,
+  useResetToken,
+} from './accounts.js';
 
 // ---------- WebSocket clients ----------
 
@@ -131,6 +146,7 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, route: s
       version: SERVER_VERSION,
       protocol: PROTOCOL_VERSION,
       signup: config.signupMode,
+      adminContact: config.adminContact || null,
       playersOnline: online,
       rooms: rooms.rooms.size,
       avatars: AVATARS,
@@ -176,6 +192,7 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, route: s
     } finally {
       client.release();
     }
+    await applyAdminEmails();
     const token = await createSession(userId);
     return json(req, res, 201, { token, profile: await getProfile(userId) });
   }
@@ -186,9 +203,10 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, route: s
     if (rateLimited(`login:${clientIp(req)}`, 30) || rateLimited(`login:${email}`, 10)) {
       throw new HttpError(429, 'Too many attempts. Try again in a few minutes.');
     }
-    const { rows } = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT id, password_hash, disabled FROM users WHERE email = $1', [email]);
     const ok = rows[0] && (await verifyPassword(String(body.password ?? ''), rows[0].password_hash));
     if (!ok) throw new HttpError(401, 'Email or password is wrong.');
+    if (rows[0].disabled) throw new HttpError(403, 'This account has been turned off. Ask the server admin.');
     const token = await createSession(rows[0].id);
     return json(req, res, 200, { token, profile: await getProfile(rows[0].id) });
   }
@@ -198,6 +216,31 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, route: s
     if (token) await deleteSession(token);
     return json(req, res, 200, { ok: true });
   }
+
+  if (route === '/api/password/forgot' && method === 'POST') {
+    const body = await readBody(req);
+    const email = String(body.email ?? '').trim().toLowerCase();
+    if (rateLimited(`forgot:${clientIp(req)}`, 5)) throw new HttpError(429, 'Too many requests. Try again later.');
+    if (!validEmail(email)) throw new HttpError(400, 'Enter a valid email address.');
+    await requestReset(email);
+    return json(req, res, 200, { ok: true, contact: config.adminContact || null });
+  }
+
+  if (route === '/api/password/reset' && method === 'POST') {
+    if (rateLimited(`reset:${clientIp(req)}`, 10)) throw new HttpError(429, 'Too many attempts. Try again later.');
+    const body = await readBody(req);
+    const userId = await useResetToken(String(body.token ?? ''), String(body.password ?? ''));
+    const token = await createSession(userId);
+    return json(req, res, 200, { token, profile: await getProfile(userId) });
+  }
+
+  if (route === '/api/leaderboard' && method === 'GET') {
+    await requireUser(req);
+    const by = new URL(req.url ?? '', 'http://x').searchParams.get('by') === 'wins' ? 'wins' : 'chips';
+    return json(req, res, 200, { by, players: await leaderboard(by) });
+  }
+
+  if (route.startsWith('/api/admin/')) return adminApi(req, res, route, method);
 
   if (route === '/api/me' && method === 'GET') {
     const userId = await requireUser(req);
@@ -241,6 +284,58 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, route: s
   }
 
   throw new HttpError(404, 'Not found.');
+}
+
+async function adminApi(req: http.IncomingMessage, res: http.ServerResponse, route: string, method: string): Promise<void> {
+  const actorId = await requireUser(req);
+  if (!(await isAdmin(actorId))) throw new HttpError(403, 'Only server admins can do that.');
+
+  if (route === '/api/admin/stats' && method === 'GET') {
+    const online = new Set([...clients].map((c) => c.userId).filter((u) => u !== null)).size;
+    const playing = [...rooms.rooms.values()].filter((r) => r.status !== 'lobby').length;
+    return json(req, res, 200, { ...(await serverStats()), online, rooms: rooms.rooms.size, playing });
+  }
+
+  if (route === '/api/admin/users' && method === 'GET') {
+    const q = new URL(req.url ?? '', 'http://x').searchParams.get('q') ?? '';
+    const users = (await listUsers(q)).map((u) => ({ ...u, online: connected(u.userId) }));
+    return json(req, res, 200, { users });
+  }
+
+  const m = /^\/api\/admin\/users\/(\d+)(\/reset)?$/.exec(route);
+  if (!m) throw new HttpError(404, 'Not found.');
+  const userId = Number(m[1]);
+  const detail = async () => {
+    const user = await getAdminUser(userId);
+    if (!user) throw new HttpError(404, 'No such account.');
+    return { user: { ...user, online: connected(userId) }, games: await getHistory(userId, 20) };
+  };
+
+  if (m[2] && method === 'POST') return json(req, res, 200, await createResetToken(actorId, userId));
+  if (method === 'GET') return json(req, res, 200, await detail());
+  if (method === 'PUT') {
+    if (await adminUpdateUser(actorId, userId, await readBody(req))) {
+      rooms.leave(userId);
+      disconnect(userId);
+    }
+    return json(req, res, 200, await detail());
+  }
+  if (method === 'DELETE') {
+    rooms.leave(userId);
+    await deleteUser(actorId, userId);
+    disconnect(userId);
+    return json(req, res, 200, { ok: true });
+  }
+  throw new HttpError(404, 'Not found.');
+}
+
+/** Closes a player's live connections, for example after their account is turned off. */
+function disconnect(userId: number): void {
+  for (const c of clients) {
+    if (c.userId !== userId) continue;
+    send(c.ws, { t: 'authFailed' });
+    c.ws.close();
+  }
 }
 
 // ---------- Static client ----------
@@ -291,6 +386,7 @@ const server = http.createServer(async (req, res) => {
       await api(req, res, route);
     } catch (err) {
       if (err instanceof HttpError) json(req, res, err.status, { error: err.message });
+      else if (err instanceof AccountError) json(req, res, 400, { error: err.message });
       else {
         console.error(err);
         json(req, res, 500, { error: 'Something went wrong on the server.' });
@@ -336,6 +432,7 @@ wss.on('connection', (ws) => {
           return send(ws, { t: 'error', message: 'This app version does not match the server. Reload the page.' });
         }
         client.userId = userId;
+        touchLastSeen(userId).catch(() => {});
         send(ws, { t: 'hello', profile });
         send(ws, { t: 'tables', tables: rooms.openTables() });
         rooms.refresh(userId);
@@ -407,6 +504,7 @@ wss.on('connection', (ws) => {
     clearInterval(ping);
     clients.delete(client);
     if (client.userId) {
+      touchLastSeen(client.userId).catch(() => {});
       const room = rooms.roomOf(client.userId);
       if (room) rooms.refresh(client.userId);
     }
@@ -417,6 +515,7 @@ async function main(): Promise<void> {
   await waitForDb();
   await migrate();
   await pool.query('DELETE FROM sessions WHERE expires_at < now()');
+  await applyAdminEmails();
   server.listen(config.port, () => {
     console.log(`${config.serverName} listening on :${config.port} (sign-up: ${config.signupMode})`);
     if (config.signupMode === 'invite' && !config.inviteCode) {

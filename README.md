@@ -3,7 +3,8 @@
 Play the Filipino card game Tong-its with friends in the browser on a phone, iPad or computer. It installs like an app on iPhone and Android.
 
 - **Anyone can host a server.** One `docker compose up` starts the game server and its own Postgres database.
-- **Players choose the server.** The app's first screen asks for a server address and remembers the ones you've used.
+- **The app comes with the server.** Open the server's address and you're on that server. To play somewhere else, open that server's address instead.
+- **Admin page and leaderboard.** Admins see server stats, look up and edit players, turn accounts off and make password reset links. Everyone can see the leaderboard.
 - **Accounts and profiles.** Players sign up with email and password. Each profile keeps chips, wins, Tong-its wins, times burned, and every round played with who was at the table.
 - **House rules.** Before a game the host sets the variants on a rules page: Draw ties, stock-out ties, sapaw blocking, secret four-of-a-kind, Q-K-A runs, next dealer, turn timer, payouts and game length. Hosts can save rule sets to their profile.
 
@@ -42,6 +43,8 @@ Open `.env` in a text editor. At minimum, change `POSTGRES_PASSWORD` and `INVITE
 | `INVITE_CODE` | The code new players type on the sign-up screen when `SIGNUP_MODE=invite` | empty, so nobody can sign up until you set it |
 | `CORS_ORIGINS` | Which web addresses may run the app against this server. `*` allows any copy of the app (needed for the shared app on GitHub Pages). Use a comma-separated list such as `https://tongits.example.com` to lock it down | `*` |
 | `STARTING_CHIPS` | Chips every new account starts with | `100` |
+| `ADMIN_EMAILS` | Comma-separated emails whose accounts get the **Admin** page. Sign up with one of them after the server starts | empty |
+| `ADMIN_CONTACT` | Your email address or a web link, shown on **Forgot password?** so players can reach you | empty |
 | `TONGITS_IMAGE` | Which server image to run | `ghcr.io/spiderkitty72/tongits:latest` |
 
 ### 3. Start it
@@ -92,10 +95,10 @@ Each player needs two things from the host: the **server address** and, on an in
 
 Either of these works:
 
-1. **The server's own address.** Every server includes the app. Open `https://tongits.example.com` (or the local address) and the app connects to that server automatically.
+1. **The server's own address.** Every server includes the app. Open `https://tongits.example.com` (or the local address) and the app always uses that server; there is no server picker. To play on a different server, open that server's address.
 2. **The shared app** at `https://spiderkitty72.github.io/Tongits/`, if GitHub Pages is turned on for this repo. Type the server address on the first screen. The server must use **HTTPS**, because a secure page can't talk to an `http://` server, and its `CORS_ORIGINS` must allow the app's address (the default `*` does).
 
-On the **Choose a server** screen you can type an address with or without `https://`. Local addresses such as `192.168.1.20:8080` get `http://` automatically. Saved servers are listed underneath; tap one to switch. **Change server** on the home screen comes back here.
+On the **Choose a server** screen you can type an address with or without `https://`. Local addresses such as `192.168.1.20:8080` get `http://` automatically. Saved servers are listed underneath; tap one to switch. **Change server** on the home screen comes back here. This screen only appears in the shared app, never on a server's own address.
 
 ### Create an account
 
@@ -143,6 +146,7 @@ If someone's turn timer runs out, the server plays for them: it draws, then disc
 | Stop | `docker compose down` (your data is kept) |
 | See the log | `docker compose logs -f server` |
 | Update to the latest version | `docker compose pull && docker compose up -d` |
+| Make someone an admin | `docker compose exec server node packages/server/dist/admin.js make-admin friend@example.com` |
 | List accounts | `docker compose exec server node packages/server/dist/admin.js list-users` |
 | Reset a player's password | `docker compose exec server node packages/server/dist/admin.js reset-password friend@example.com NewPassword123` |
 | Back up the database | `docker compose exec -T db pg_dump -U tongits tongits > tongits-backup.sql` |
@@ -152,7 +156,9 @@ If someone's turn timer runs out, the server plays for them: it draws, then disc
 - **Data** lives in the `tongits-db` Docker volume and survives updates and restarts. Back it up regularly, for example with a nightly cron job running the backup command.
 - **Database changes** in new versions are applied automatically when the server starts.
 - **Games in progress** live in server memory. Restarting the server ends any match being played; finished rounds are already saved.
-- **Password reset** also logs that player out on all their devices. There's no "forgot password" email yet, so players ask the host.
+- **Admin page.** Accounts in `ADMIN_EMAILS` (or made admin with `make-admin`, or ticked **Server admin** by another admin) see **Admin** on the home screen. It shows who is online, games in progress, accounts, active and new players this week, and rounds played. Search players by name or email, then open one to see their stats and recent rounds, change their name or chips, make them an admin, turn the account off (logs them out and blocks login) or delete it.
+- **Password resets.** A player taps **Forgot password?** and enters their email. They show up at the top of the Admin list marked **Wants a reset**. Open them, tap **Make reset link**, and send the link with **Copy**, **Email it** or **Share**. The link works once, for 24 hours, and logs the player out on their other devices. The server doesn't send email itself. The command-line `reset-password` still works too.
+- **Leaderboard.** Everyone logged in can open **🏆 Leaderboard** from the home screen to see the top 50 by chips or by wins. Players who haven't finished a round yet and turned-off accounts are left out.
 - **Changing sign-up** later: edit `SIGNUP_MODE` or `INVITE_CODE` in `.env`, then `docker compose up -d`.
 
 ---

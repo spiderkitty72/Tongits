@@ -1,6 +1,7 @@
 // Server admin commands, run next to the server:
 //   docker compose exec server node packages/server/dist/admin.js list-users
 //   docker compose exec server node packages/server/dist/admin.js reset-password <email> <new password>
+//   docker compose exec server node packages/server/dist/admin.js make-admin <email>
 import { hashPassword } from './auth.js';
 import { pool } from './db.js';
 
@@ -28,8 +29,14 @@ async function main(): Promise<void> {
     // Log the player out everywhere so the new password takes effect at once.
     await pool.query('DELETE FROM sessions WHERE user_id = $1', [rows[0].id]);
     console.log(`Password reset for ${email}.`);
+  } else if (cmd === 'make-admin') {
+    const email = (args[0] ?? '').trim().toLowerCase();
+    if (!email) throw new Error('Usage: make-admin <email>');
+    const { rowCount } = await pool.query('UPDATE users SET is_admin = true WHERE email = $1', [email]);
+    if (!rowCount) throw new Error(`No account with email ${email}.`);
+    console.log(`${email} is now an admin. Admin appears on their home screen the next time they open the app.`);
   } else {
-    console.log('Commands: list-users | reset-password <email> <new password>');
+    console.log('Commands: list-users | reset-password <email> <new password> | make-admin <email>');
   }
 }
 

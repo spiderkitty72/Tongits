@@ -64,6 +64,21 @@ const MIGRATIONS: { id: number; sql: string }[] = [
       );
     `,
   },
+  {
+    id: 2,
+    sql: `
+      ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE users ADD COLUMN disabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE users ADD COLUMN last_seen TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN reset_requested_at TIMESTAMPTZ;
+      CREATE TABLE password_resets (
+        token_hash TEXT PRIMARY KEY,
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+    `,
+  },
 ];
 
 export async function migrate(): Promise<void> {

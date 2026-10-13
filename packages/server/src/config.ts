@@ -18,6 +18,10 @@ export const config = {
   /** Comma-separated list of web origins allowed to call the API, or "*" for any. */
   corsOrigins: (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim()).filter(Boolean),
   startingChips: Number(process.env.STARTING_CHIPS ?? 100),
+  /** Comma-separated emails whose accounts are server admins. */
+  adminEmails: (process.env.ADMIN_EMAILS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+  /** How players reach the admin for a password reset: an email address or a web link. */
+  adminContact: (process.env.ADMIN_CONTACT ?? '').trim(),
   publicDir: process.env.PUBLIC_DIR ?? path.resolve(here, '../public'),
   sessionDays: 30,
 };
