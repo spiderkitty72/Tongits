@@ -184,6 +184,24 @@ function header(title: string, back?: string): string {
   return `<header class="bar">${backBtn}<h1>${esc(title)}</h1><span class="conn ${state.online || !state.token ? 'ok' : 'off'}" title="${state.online ? 'Connected' : 'Reconnecting'}"></span></header>`;
 }
 
+/** The Tong-its wordmark: a small fan of cards and the name. */
+const LOGO = `<span class="logo" role="img" aria-label="Tong-its"><svg class="logo-fan" viewBox="0 0 44 36" aria-hidden="true">
+  <g transform="rotate(-18 22 34)"><rect x="12" y="4" width="18" height="26" rx="3" fill="#fffdf7" stroke="#0a3a24"/><text x="21" y="22" text-anchor="middle" font-size="13" fill="#1b1b1b">♠</text></g>
+  <g><rect x="13" y="2" width="18" height="26" rx="3" fill="#fffdf7" stroke="#0a3a24"/><text x="22" y="20" text-anchor="middle" font-size="13" fill="#c62828">♥</text></g>
+  <g transform="rotate(18 22 34)"><rect x="14" y="4" width="18" height="26" rx="3" fill="#fffdf7" stroke="#0a3a24"/><text x="23" y="22" text-anchor="middle" font-size="13" fill="#c62828">♦</text></g>
+</svg><span class="logo-text">Tong-its</span></span>`;
+
+/** The page bar with the logo in place of a title. */
+function logoHeader(back?: string): string {
+  const backBtn = back ? `<button class="icon" data-action="${back}" aria-label="Back">←</button>` : '<span></span>';
+  return `<header class="bar logo-bar">${backBtn}<h1>${LOGO}</h1><span class="conn ${state.online || !state.token ? 'ok' : 'off'}" title="${state.online ? 'Connected' : 'Reconnecting'}"></span></header>`;
+}
+
+/** The server's name, shown small at the foot of the page. */
+function serverFooter(): string {
+  return state.info ? `<p class="server-name">${esc(state.info.name)}</p>` : '';
+}
+
 function serverScreen(): string {
   const saved = store.servers();
   const here = location.protocol.startsWith('http') ? location.origin + location.pathname.replace(/\/[^/]*$/, '') : '';
@@ -196,7 +214,7 @@ function serverScreen(): string {
         .join('')}</ul>`
     : '';
   return `<main class="page narrow">
-    <div class="brand"><img src="./icons/icon-192.png" alt="" width="72" height="72"><h1>Tong-its</h1><p>Play with friends on any server.</p></div>
+    <div class="brand"><h1>${LOGO}</h1><p>Play with friends on any server.</p></div>
     <form id="server-form" class="card-box">
       <label>Server address<input name="url" type="text" inputmode="url" autocapitalize="off" spellcheck="false" autocomplete="url" placeholder="https://tongits.example.com" value="${esc(state.serverUrl ?? here)}" required></label>
       <button class="primary" ${state.busy ? 'disabled' : ''}>${state.busy ? 'Connecting…' : 'Connect'}</button>
@@ -212,8 +230,7 @@ function authScreen(): string {
   const reg = state.authMode === 'register';
   const canRegister = info.signup !== 'closed';
   return `<main class="page narrow">
-    ${header(info.name, 'change-server')}
-    <p class="muted center">${esc(state.serverUrl!)} · ${info.playersOnline} online</p>
+    ${logoHeader('change-server')}
     ${canRegister ? `<div class="tabs"><button class="${reg ? '' : 'active'}" data-action="auth-mode" data-mode="login">Log in</button><button class="${reg ? 'active' : ''}" data-action="auth-mode" data-mode="register">Sign up</button></div>` : ''}
     <form id="auth-form" class="card-box">
       <label>Email<input name="email" type="email" autocomplete="email" required></label>
@@ -223,13 +240,15 @@ function authScreen(): string {
       <button class="primary" ${state.busy ? 'disabled' : ''}>${reg ? 'Create account' : 'Log in'}</button>
     </form>
     ${!canRegister ? '<p class="muted center">Sign-up is closed on this server.</p>' : ''}
+    ${serverFooter()}
+    <p class="muted center small">${esc(state.serverUrl!)} · ${info.playersOnline} online</p>
   </main>`;
 }
 
 function homeScreen(): string {
   const p = state.profile!;
   return `<main class="page narrow">
-    ${header(state.info?.name ?? 'Tong-its')}
+    ${logoHeader()}
     <button class="profile-chip" data-action="open-profile"><span class="avatar big">${esc(p.avatar)}</span>
       <span><strong>${esc(p.displayName)}</strong><small>${p.chips} chips · ${p.wins} wins of ${p.gamesPlayed}</small></span><span>›</span></button>
     <div class="card-box">
@@ -248,6 +267,7 @@ function homeScreen(): string {
       <button data-action="logout">Log out</button>
     </div>
     ${installHint()}
+    ${serverFooter()}
   </main>`;
 }
 
