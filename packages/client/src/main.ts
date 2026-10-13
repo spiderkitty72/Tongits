@@ -234,6 +234,7 @@ function homeScreen(): string {
       <span><strong>${esc(p.displayName)}</strong><small>${p.chips} chips · ${p.wins} wins of ${p.gamesPlayed}</small></span><span>›</span></button>
     <div class="card-box">
       <button class="primary big" data-action="create-room" ${state.online ? '' : 'disabled'}>Create a room</button>
+      <button class="big" data-action="play-bots" ${state.online ? '' : 'disabled'}>Play against computers</button>
       <form id="join-form" class="join">
         <input name="code" placeholder="Room code" maxlength="6" autocapitalize="characters" autocomplete="off" required aria-label="Room code">
         <button ${state.online ? '' : 'disabled'}>Join</button>
@@ -272,8 +273,10 @@ function lobbyScreen(room: RoomView): string {
     .map((s, i) =>
       s
         ? `<li class="${s.ready ? 'ready' : ''}"><span class="avatar">${esc(s.avatar)}</span><span class="who"><strong>${esc(s.displayName)}${s.userId === meId ? ' (you)' : ''}</strong>
-            <small>${s.userId === room.hostId ? 'Host · ' : ''}${s.connected ? '' : 'Offline · '}${s.ready ? 'Ready' : 'Not ready'}</small></span></li>`
-        : `<li class="empty"><span class="avatar">·</span><span class="who"><strong>Seat ${i + 1} open</strong><small>Share the code to invite</small></span></li>`,
+            <small>${s.isBot ? 'Computer' : `${s.userId === room.hostId ? 'Host · ' : ''}${s.connected ? '' : 'Offline · '}${s.ready ? 'Ready' : 'Not ready'}`}</small></span>
+            ${s.isBot && isHost ? `<button class="small-btn" data-action="remove-bot" data-seat="${i}">Remove</button>` : ''}</li>`
+        : `<li class="empty"><span class="avatar">·</span><span class="who"><strong>Seat ${i + 1} open</strong><small>Share the code to invite</small></span>
+            ${isHost ? `<button class="small-btn" data-action="add-bot" data-seat="${i}">Add computer</button>` : ''}</li>`,
     )
     .join('');
   const allIn = room.seats.every((s) => s && s.ready);
@@ -294,7 +297,7 @@ function lobbyScreen(room: RoomView): string {
           ${mySeat >= 0 ? `<button class="${room.seats[mySeat]?.ready ? '' : 'primary'}" data-action="ready">${room.seats[mySeat]?.ready ? 'Not ready' : "I'm ready"}</button>` : '<p class="muted">The room is full; you are watching.</p>'}
           ${isHost ? `<button class="primary" data-action="start" ${allIn ? '' : 'disabled'}>Start game</button>` : ''}
         </div>
-        ${isHost && !allIn ? '<p class="muted small">Start unlocks when three players are ready.</p>' : ''}
+        ${isHost && !allIn ? '<p class="muted small">Start unlocks when three players are ready. Fill an empty seat with Add computer to play with fewer people.</p>' : ''}
       </section>
       <section class="card-box">
         <div class="rules-head"><h3>House rules</h3>
@@ -456,6 +459,15 @@ app.addEventListener('click', (e) => {
       break;
     case 'create-room':
       socket?.send({ t: 'create' });
+      break;
+    case 'play-bots':
+      socket?.send({ t: 'create', bots: 2 });
+      break;
+    case 'add-bot':
+      socket?.send({ t: 'addBot', seat: Number(el.dataset.seat) });
+      break;
+    case 'remove-bot':
+      socket?.send({ t: 'removeBot', seat: Number(el.dataset.seat) });
       break;
     case 'leave':
       if (room && room.mySeat >= 0 && (room.status === 'playing' || room.status === 'roundOver') &&

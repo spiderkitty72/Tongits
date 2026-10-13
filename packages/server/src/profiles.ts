@@ -98,7 +98,8 @@ export async function recordRound(opts: {
   roundNo: number;
   startedAt: Date;
   rules: RuleSet;
-  seats: { userId: number; displayName: string }[];
+  /** userId is null for computer players. */
+  seats: { userId: number | null; displayName: string }[];
   result: RoundResult;
 }): Promise<void> {
   const { result } = opts;

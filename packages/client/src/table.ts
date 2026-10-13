@@ -13,7 +13,7 @@ const END_LABEL: Record<string, string> = { tongits: 'Tong-its!', draw: 'Draw', 
 function chipsLabel(s: SeatView | null | undefined): string {
   if (!s) return '';
   const change = s.total ? ` (${s.total > 0 ? '+' : ''}${s.total})` : '';
-  return `${s.chips} chips${change}`;
+  return s.isBot ? `Computer${change}` : `${s.chips} chips${change}`;
 }
 
 function seatName(room: RoomView, seat: number): string {

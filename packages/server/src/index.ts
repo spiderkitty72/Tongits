@@ -348,8 +348,18 @@ wss.on('connection', (ws) => {
         return { userId, displayName: p.displayName, avatar: p.avatar, chips: p.chips };
       };
       switch (msg.t) {
-        case 'create':
+        case 'create': {
           rooms.create(await member());
+          // "Play against computers" fills the other two seats straight away.
+          const bots = Math.min(2, Math.max(0, Number(msg.bots) || 0));
+          for (let i = 0; i < bots; i++) rooms.addBot(userId);
+          break;
+        }
+        case 'addBot':
+          rooms.addBot(userId, typeof msg.seat === 'number' ? msg.seat : undefined);
+          break;
+        case 'removeBot':
+          rooms.removeBot(userId, Number(msg.seat));
           break;
         case 'join':
           rooms.join(await member(), msg.code);

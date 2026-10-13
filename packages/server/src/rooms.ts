@@ -9,6 +9,7 @@ import {
   SEATS,
   applyAction,
   autoAction,
+  botAction,
   newRound,
   normalizeRules,
   playerView,
@@ -25,7 +26,13 @@ export interface Member {
 
 interface Seat extends Member {
   ready: boolean;
+  /** A computer player. Bots have negative user ids and no account. */
+  isBot?: boolean;
 }
+
+const BOT_NAMES = ['Lola', 'Kuya Ben', 'Tita Nena', 'Mang Jose', 'Ate Rose', 'Lolo Ramon'];
+/** Pause before each computer move so people can follow along. */
+const BOT_DELAY_MS = 1100;
 
 export type RoomStatus = 'lobby' | 'playing' | 'roundOver' | 'finished';
 
@@ -33,7 +40,7 @@ export interface RoomView {
   code: string;
   hostId: number;
   mySeat: number;
-  seats: ({ userId: number; displayName: string; avatar: string; ready: boolean; connected: boolean; chips: number; total: number } | null)[];
+  seats: ({ userId: number; displayName: string; avatar: string; ready: boolean; connected: boolean; chips: number; total: number; isBot: boolean } | null)[];
   spectators: number;
   rules: RuleSet;
   status: RoomStatus;
@@ -74,6 +81,7 @@ export class Room {
   roundStartedAt = new Date();
   turnDeadline: number | null = null;
   timer: NodeJS.Timeout | null = null;
+  botTimer: NodeJS.Timeout | null = null;
   lastActive = Date.now();
   notice: string | null = null;
   isOpen = false;
@@ -83,12 +91,17 @@ export class Room {
   seatOf(userId: number): number {
     return this.seats.findIndex((s) => s?.userId === userId);
   }
+
+  hasHumans(): boolean {
+    return this.seats.some((s) => s && !s.isBot);
+  }
 }
 
 export class RoomManager {
   rooms = new Map<string, Room>();
   /** Which room each user is in. A user is in at most one room. */
   userRoom = new Map<number, string>();
+  private nextBotId = -1;
 
   constructor(
     private isConnected: (userId: number) => boolean,
@@ -151,12 +164,12 @@ export class RoomManager {
     if (seat >= 0) {
       room.seats[seat] = null;
       if (room.hostId === userId) {
-        const nextHost = room.seats.find((s) => s !== null);
+        const nextHost = room.seats.find((s) => s !== null && !s.isBot);
         if (nextHost) room.hostId = nextHost.userId;
       }
     }
     this.push(userId, null);
-    if (room.seats.every((s) => s === null)) {
+    if (!room.hasHumans()) {
       this.close(room);
       return;
     }
@@ -185,12 +198,35 @@ export class RoomManager {
       }));
   }
 
+  /** Host only: seat a computer player in an empty seat (the first free one if none is given). */
+  addBot(userId: number, seatIndex?: number): void {
+    const room = this.mustRoom(userId);
+    if (room.hostId !== userId) throw new GameError('Only the host can add computer players.');
+    if (room.status !== 'lobby') throw new GameError('Add computer players before the game starts.');
+    const seat = typeof seatIndex === 'number' && room.seats[seatIndex] === null ? seatIndex : room.seats.findIndex((s) => s === null);
+    if (seat < 0) throw new GameError('The table is full.');
+    const taken = new Set(room.seats.map((s) => s?.displayName));
+    const name = BOT_NAMES.find((n) => !taken.has(n)) ?? `Computer ${seat + 1}`;
+    room.seats[seat] = { userId: this.nextBotId--, displayName: name, avatar: '🤖', chips: 0, ready: true, isBot: true };
+    this.broadcast(room);
+  }
+
+  /** Host only: take a computer player off the table. */
+  removeBot(userId: number, seatIndex: number): void {
+    const room = this.mustRoom(userId);
+    if (room.hostId !== userId) throw new GameError('Only the host can remove computer players.');
+    if (room.status !== 'lobby') throw new GameError('Computer players stay until the match ends.');
+    if (!room.seats[seatIndex]?.isBot) throw new GameError('That seat is not a computer player.');
+    room.seats[seatIndex] = null;
+    this.broadcast(room);
+  }
+
   setRules(userId: number, rules: unknown): void {
     const room = this.mustRoom(userId);
     if (room.hostId !== userId) throw new GameError('Only the host can change the rules.');
     if (room.status !== 'lobby' && room.status !== 'finished') throw new GameError('Rules are locked once the game starts.');
     room.rules = normalizeRules(rules);
-    for (const s of room.seats) if (s) s.ready = false;
+    for (const s of room.seats) if (s) s.ready = !!s.isBot;
     this.broadcast(room);
   }
 
@@ -234,13 +270,15 @@ export class RoomManager {
 
   private backToLobby(room: Room): void {
     if (room.timer) clearTimeout(room.timer);
+    if (room.botTimer) clearTimeout(room.botTimer);
     room.timer = null;
+    room.botTimer = null;
     room.turnDeadline = null;
     room.status = 'lobby';
     room.game = null;
     room.roundNo = 0;
     room.totals = [0, 0, 0];
-    for (const s of room.seats) if (s) s.ready = false;
+    for (const s of room.seats) if (s) s.ready = !!s.isBot;
   }
 
   act(userId: number, action: Action): void {
@@ -271,9 +309,10 @@ export class RoomManager {
               displayName: s.displayName,
               avatar: s.avatar,
               ready: s.ready,
-              connected: this.isConnected(s.userId),
+              connected: s.isBot ? true : this.isConnected(s.userId),
               chips: s.chips,
               total: room.totals[i],
+              isBot: !!s.isBot,
             }
           : null,
       ),
@@ -312,7 +351,31 @@ export class RoomManager {
     const g = room.game!;
     if (g.phase === 'ended' && room.status === 'playing') this.finishRound(room);
     this.armTimer(room);
+    this.scheduleBot(room);
     this.broadcast(room);
+  }
+
+  /** If a computer player has to move next, make that move after a short pause. */
+  private scheduleBot(room: Room): void {
+    if (room.botTimer) clearTimeout(room.botTimer);
+    room.botTimer = null;
+    const g = room.game;
+    if (!g || room.status !== 'playing' || g.phase === 'ended') return;
+    const waiting = g.phase === 'drawCall' && g.drawCall
+      ? Object.entries(g.drawCall.responses).filter(([, r]) => r === null).map(([k]) => Number(k))
+      : [g.turn];
+    const seat = waiting.find((x) => room.seats[x]?.isBot);
+    if (seat === undefined) return;
+    room.botTimer = setTimeout(() => {
+      room.botTimer = null;
+      if (room.status !== 'playing' || room.game !== g) return;
+      try {
+        const action = botAction(g, seat);
+        if (action) this.apply(room, seat, action);
+      } catch (err) {
+        console.error('Computer move failed', err);
+      }
+    }, BOT_DELAY_MS);
   }
 
   private finishRound(room: Room): void {
@@ -335,7 +398,7 @@ export class RoomManager {
       roundNo: room.roundNo,
       startedAt: room.roundStartedAt,
       rules: room.rules,
-      seats: room.seats.map((s) => ({ userId: s!.userId, displayName: s!.displayName })),
+      seats: room.seats.map((s) => ({ userId: s!.isBot ? null : s!.userId, displayName: s!.isBot ? `${s!.displayName} (computer)` : s!.displayName })),
       result,
     }).catch((err) => console.error('Could not save round', err));
   }
@@ -384,6 +447,7 @@ export class RoomManager {
   private close(room: Room): void {
     if (room.isOpen) this.openTablesChanged();
     if (room.timer) clearTimeout(room.timer);
+    if (room.botTimer) clearTimeout(room.botTimer);
     this.rooms.delete(room.code);
     for (const s of room.seats) if (s) this.userRoom.delete(s.userId);
     for (const u of room.spectators) this.userRoom.delete(u);

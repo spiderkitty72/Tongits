@@ -6,6 +6,7 @@ import {
   RuleSet,
   applyAction,
   autoAction,
+  botAction,
   classifyMeld,
   handPoints,
   mulberry32,
@@ -241,5 +242,34 @@ describe('rules input', () => {
     expect(r.turnSeconds).toBe(45);
     expect(r.payouts.base).toBe(0);
     expect(r.rounds).toBe(50);
+  });
+});
+
+describe('botAction', () => {
+  it('plays whole rounds against itself without illegal moves', () => {
+    const endings = new Set<string>();
+    for (let seed = 1; seed <= 200; seed++) {
+      let s = newRound(DEFAULT_RULES, seed % 3, mulberry32(seed));
+      for (let step = 0; step < 2000 && s.phase !== 'ended'; step++) {
+        const waiting = s.phase === 'drawCall' ? Number(Object.entries(s.drawCall!.responses).find(([, r]) => r === null)![0]) : s.turn;
+        const action = botAction(s, waiting);
+        expect(action).not.toBeNull();
+        s = applyAction(s, waiting, action!);
+      }
+      expect(s.phase).toBe('ended');
+      endings.add(s.result!.endedBy);
+    }
+    // Over many deals the bots should reach more than one kind of ending.
+    expect(endings.size).toBeGreaterThan(1);
+  });
+
+  it('takes the discard when it completes a meld', () => {
+    let s = newRound(DEFAULT_RULES, 0, mulberry32(7));
+    s = structuredClone(s);
+    s.turn = 1;
+    s.phase = 'draw';
+    s.players[1].hand = ['5S', '5C', '9D', '12H'];
+    s.discard = ['5H'];
+    expect(botAction(s, 1)).toEqual({ type: 'pickDiscard', cards: ['5S', '5C'] });
   });
 });
