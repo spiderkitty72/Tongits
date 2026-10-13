@@ -15,7 +15,17 @@
     <title>Tong-its</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div style="font-family: system-ui, sans-serif; text-align: center; padding: 48px 16px; color: #f4f1e8; background: #0f5132; min-height: 100vh">
+        <h1>Tong-its</h1>
+        <p>Loading…</p>
+        <p style="font-size: 14px; opacity: 0.8">
+          If this message stays, the app could not start. Open it from your Tong-its server's address
+          (for example http://localhost:8080), or build it first with <code>npm run build</code> and open
+          <code>packages/client/dist/index.html</code>.
+        </p>
+      </div>
+    </div>
     <div id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="./src/main.ts"></script>
   </body>
