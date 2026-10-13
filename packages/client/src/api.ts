@@ -36,6 +36,8 @@ export interface SeatView {
   chips: number;
   /** Chips won or lost so far in this match. */
   total: number;
+  /** A computer player. */
+  isBot: boolean;
 }
 
 export interface RoomView {
@@ -182,7 +184,9 @@ export type ServerMessage =
   | { t: 'authFailed' };
 
 export type ClientMessage =
-  | { t: 'create' }
+  | { t: 'create'; bots?: number }
+  | { t: 'addBot'; seat?: number }
+  | { t: 'removeBot'; seat: number }
   | { t: 'join'; code: string }
   | { t: 'leave' }
   | { t: 'open'; open: boolean }
