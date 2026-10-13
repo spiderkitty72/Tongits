@@ -1,4 +1,4 @@
-import { CardId, Meld, PlayerView, classifyMeld, meldableCards, sortByRank, sortBySuit } from '@tongits/engine';
+import { CardId, Meld, PlayerView, cardLabel, classifyMeld, meldableCards, sortByRank, sortBySuit } from '@tongits/engine';
 import type { RoomView, SeatView } from './api';
 import { cardBack, cardHtml, esc } from './util';
 
@@ -14,6 +14,18 @@ function seatName(room: RoomView, seat: number): string {
   return room.seats[seat]?.displayName ?? `Seat ${seat + 1}`;
 }
 
+/** Pairs of cards in hand that would meld with the top discard. Any longer meld contains such a pair. */
+export function discardPairs(hand: CardId[], top: CardId | undefined, rules: PlayerView['rules']): CardId[][] {
+  if (!top) return [];
+  const pairs: CardId[][] = [];
+  for (let i = 0; i < hand.length; i++) {
+    for (let j = i + 1; j < hand.length; j++) {
+      if (classifyMeld([hand[i], hand[j], top], rules)) pairs.push([hand[i], hand[j]]);
+    }
+  }
+  return pairs;
+}
+
 /** What the selected cards could do right now. */
 export function moves(g: PlayerView, ui: TableUi) {
   const sel = [...ui.selected];
@@ -23,6 +35,8 @@ export function moves(g: PlayerView, ui: TableUi) {
     myTurn,
     canDrawStock: myTurn && g.phase === 'draw' && g.stockCount > 0,
     canPickDiscard: myTurn && g.phase === 'draw' && !!top && sel.length >= 2 && !!classifyMeld([...sel, top], g.rules),
+    /** Hand pairs that can take the top discard; empty unless it's my draw. */
+    discardPairs: myTurn && g.phase === 'draw' ? discardPairs(g.hand, top, g.rules) : [],
     canMeld: myTurn && g.phase === 'play' && !!classifyMeld(sel, g.rules),
     canDiscard: myTurn && g.phase === 'play' && sel.length === 1,
     canCallDraw: g.canCallDraw,
@@ -33,6 +47,14 @@ export function moves(g: PlayerView, ui: TableUi) {
         : [],
     ),
   };
+}
+
+function discardTip(top: CardId | undefined, usable: boolean, ready: boolean): string {
+  if (!top) return 'Draw from the stock.';
+  const card = cardLabel(top);
+  if (ready) return `Tap Take discard to meld the ${card}.`;
+  if (usable) return `The ${card} melds with your hand. Tap Take discard, or pick the cards yourself first.`;
+  return `You can only take the ${card} if it makes a meld with two or more of your cards. Draw from the stock.`;
 }
 
 function meldsHtml(melds: Meld[], targets: Set<string>): string {
@@ -128,8 +150,9 @@ export function renderTable(room: RoomView, ui: TableUi): string {
         <button class="primary" data-action="fight">Fight</button><button data-action="fold">Fold</button>`;
     } else if (m.myTurn && g.phase === 'draw') {
       actions = `<button class="primary" data-action="draw-stock" ${m.canDrawStock ? '' : 'disabled'}>Draw from stock</button>
-        <button data-action="pick-discard" ${m.canPickDiscard ? '' : 'disabled'} title="Select two cards that meld with the top discard">Take discard</button>
-        ${g.canCallDraw ? '<button class="call" data-action="call-draw">Call Draw</button>' : ''}`;
+        <button data-action="pick-discard" ${m.discardPairs.length ? '' : 'disabled'}>Take discard</button>
+        ${g.canCallDraw ? '<button class="call" data-action="call-draw">Call Draw</button>' : ''}
+        <span class="tip">${discardTip(top, m.discardPairs.length > 0, m.canPickDiscard)}</span>`;
     } else if (m.myTurn && g.phase === 'play') {
       actions = `<button data-action="meld" ${m.canMeld ? '' : 'disabled'}>Meld</button>
         <button class="primary" data-action="discard" ${m.canDiscard ? '' : 'disabled'}>Discard</button>
@@ -155,7 +178,7 @@ export function renderTable(room: RoomView, ui: TableUi): string {
     <div class="center">
       <button type="button" class="pile stock" data-action="draw-stock" ${m.canDrawStock ? '' : 'disabled'} aria-label="Stock, ${g.stockCount} cards">
         ${g.stockCount ? cardBack() : '<span class="card empty"></span>'}<span class="count">${g.stockCount}</span></button>
-      <button type="button" class="pile discard" data-action="pick-discard" ${m.canPickDiscard ? '' : 'disabled'} aria-label="Discard pile">
+      <button type="button" class="pile discard" data-action="pick-discard" ${m.discardPairs.length ? '' : 'disabled'} aria-label="Discard pile">
         ${top ? cardHtml(top) : '<span class="card empty"></span>'}<span class="count">${g.discard.length}</span></button>
       <div class="status"><strong>${status}</strong>${deadline}</div>
     </div>
