@@ -251,6 +251,11 @@ function homeScreen(): string {
   </main>`;
 }
 
+/** The level last picked for a computer player, reused for new ones. */
+function lastBotLevel(): string {
+  try { return localStorage.getItem('tongits.botLevel') ?? 'normal'; } catch { return 'normal'; }
+}
+
 function openTablesHtml(): string {
   if (!state.online) return '';
   const rows = state.tables.map((t) => {
@@ -265,6 +270,8 @@ function openTablesHtml(): string {
   </section>`;
 }
 
+const LEVEL_LABEL: Record<string, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
+
 function lobbyScreen(room: RoomView): string {
   const meId = state.profile?.userId;
   const isHost = room.hostId === meId;
@@ -273,8 +280,9 @@ function lobbyScreen(room: RoomView): string {
     .map((s, i) =>
       s
         ? `<li class="${s.ready ? 'ready' : ''}"><span class="avatar">${esc(s.avatar)}</span><span class="who"><strong>${esc(s.displayName)}${s.userId === meId ? ' (you)' : ''}</strong>
-            <small>${s.isBot ? 'Computer' : `${s.userId === room.hostId ? 'Host · ' : ''}${s.connected ? '' : 'Offline · '}${s.ready ? 'Ready' : 'Not ready'}`}</small></span>
-            ${s.isBot && isHost ? `<button class="small-btn" data-action="remove-bot" data-seat="${i}">Remove</button>` : ''}</li>`
+            <small>${s.isBot ? (isHost ? 'Computer' : `Computer · ${LEVEL_LABEL[s.botLevel ?? 'normal']}`) : `${s.userId === room.hostId ? 'Host · ' : ''}${s.connected ? '' : 'Offline · '}${s.ready ? 'Ready' : 'Not ready'}`}</small></span>
+            ${s.isBot && isHost ? `<select class="bot-level" data-seat="${i}" aria-label="Computer level">${Object.entries(LEVEL_LABEL).map(([v, l]) => `<option value="${v}" ${v === s.botLevel ? 'selected' : ''}>${l}</option>`).join('')}</select>
+              <button class="small-btn" data-action="remove-bot" data-seat="${i}" aria-label="Remove computer">✕</button>` : ''}</li>`
         : `<li class="empty"><span class="avatar">·</span><span class="who"><strong>Seat ${i + 1} open</strong><small>Share the code to invite</small></span>
             ${isHost ? `<button class="small-btn" data-action="add-bot" data-seat="${i}">Add computer</button>` : ''}</li>`,
     )
@@ -461,10 +469,10 @@ app.addEventListener('click', (e) => {
       socket?.send({ t: 'create' });
       break;
     case 'play-bots':
-      socket?.send({ t: 'create', bots: 2 });
+      socket?.send({ t: 'create', bots: 2, level: lastBotLevel() });
       break;
     case 'add-bot':
-      socket?.send({ t: 'addBot', seat: Number(el.dataset.seat) });
+      socket?.send({ t: 'addBot', seat: Number(el.dataset.seat), level: lastBotLevel() });
       break;
     case 'remove-bot':
       socket?.send({ t: 'removeBot', seat: Number(el.dataset.seat) });
@@ -601,6 +609,12 @@ app.addEventListener('change', (e) => {
   const el = e.target as HTMLElement;
   const room = state.room;
   if (!room) return;
+  if (el.classList.contains('bot-level')) {
+    const level = (el as HTMLSelectElement).value;
+    try { localStorage.setItem('tongits.botLevel', level); } catch { /* private mode */ }
+    socket?.send({ t: 'botLevel', seat: Number(el.dataset.seat), level });
+    return;
+  }
   if (el.id === 'open-table') {
     socket?.send({ t: 'open', open: (el as HTMLInputElement).checked });
     return;
